@@ -2,11 +2,12 @@
 
 Usage:
     from app.generation import ReportGenerator, get_llm
-    gen = ReportGenerator(get_llm())  # Gemini by default
+    gen = ReportGenerator(get_llm())  # keyless demo unless a key is set
     report = gen.risk_assessment("Acme Corp", retrieved_chunks)
     print(report.to_markdown())
 """
 
+from .demo import DemoLLM
 from .generator import ReportGenerator
 from .llm import AnthropicLLM, FakeLLM, GeminiLLM, get_llm, LLMOutputError, LLMRefusal, StructuredLLM
 from .types import (
@@ -23,7 +24,7 @@ from .types import (
 from .validation import check_claim, check_claims
 
 __all__ = [
-    "AnthropicLLM", "ChunkLike", "Citation", "Claim", "DraftClaim", "DraftReport",
+    "AnthropicLLM", "DemoLLM", "ChunkLike", "Citation", "Claim", "DraftClaim", "DraftReport",
     "FakeLLM", "GeminiLLM", "get_llm", "LLMOutputError", "LLMRefusal", "RejectedClaim", "Report",
     "ReportGenerator", "ReportKind", "SimpleChunk", "StructuredLLM",
     "check_claim", "check_claims",

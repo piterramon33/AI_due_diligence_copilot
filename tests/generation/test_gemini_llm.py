@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
+pytest.importorskip("google.genai")
+
 from app.generation import DraftReport, GeminiLLM, LLMOutputError, LLMRefusal, get_llm
 
 
@@ -57,7 +59,7 @@ def test_errors(r, exc):
         GeminiLLM(client=client_for(r)).generate(system="s", prompt="p", schema=DraftReport)
 
 
-def test_factory_defaults_to_gemini(monkeypatch):
+def test_factory_uses_gemini_when_key_set(monkeypatch):
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     assert isinstance(get_llm(), GeminiLLM)

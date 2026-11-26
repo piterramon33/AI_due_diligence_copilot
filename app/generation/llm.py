@@ -2,8 +2,9 @@
 
 Generation only needs "give me an instance of this pydantic schema". Anything
 that implements `StructuredLLM` works, so swapping providers touches only this
-file. Gemini is the default (chosen 2026-11-26); Claude stays available.
-Pick with LLM_PROVIDER=gemini|anthropic, or construct a class directly.
+file. With no API key the keyless demo provider (demo.py) runs, so the
+project works out of the box. Gemini and Claude are optional. Pick with
+LLM_PROVIDER=demo|gemini|anthropic, or construct a class directly.
 """
 
 from __future__ import annotations
@@ -142,7 +143,15 @@ class GeminiLLM:
 
 
 def get_llm(provider: str | None = None) -> StructuredLLM:
-    provider = (provider or os.environ.get("LLM_PROVIDER", "gemini")).lower()
+    """Pick a provider. Unset means Gemini if a Gemini key is set, else demo."""
+    provider = (provider or os.environ.get("LLM_PROVIDER") or "").lower()
+    if not provider:
+        has_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        provider = "gemini" if has_key else "demo"
+    if provider == "demo":
+        from .demo import DemoLLM
+
+        return DemoLLM()
     if provider == "gemini":
         return GeminiLLM()
     if provider == "anthropic":
