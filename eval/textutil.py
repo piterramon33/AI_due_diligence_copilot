@@ -43,7 +43,17 @@ def html_to_text(html: str) -> str:
 def normalize(s: str) -> str:
     """Lowercase, unify quotes and collapse whitespace so spans match across chunkers."""
     s = s.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
+    # Chunkers render tables differently: app.ingestion writes Markdown rows
+    # ("| iPhone | $254,098 | 21 | % |") while the spans here are innerText-style
+    # ("iPhone $ 254,098 21 %"). Drop pipes and separator rows, and always put
+    # spaces around $ and %, so both forms normalize to the same string.
+    s = _TABLE_RULE.sub(" ", s).replace("|", " ")
+    s = _CURRENCY.sub(r" \1 ", s)
     return re.sub(r"\s+", " ", s).strip().lower()
+
+
+_TABLE_RULE = re.compile(r"(?<![\w-]):?-{3,}:?(?![\w-])")
+_CURRENCY = re.compile(r"([$%])")
 
 
 _TOKEN = re.compile(r"[a-z0-9$%][a-z0-9$%.,()\-]*")
