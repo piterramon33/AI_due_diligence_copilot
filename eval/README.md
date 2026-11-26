@@ -65,6 +65,36 @@ python eval/score_retrieval.py results.jsonl --json     # full per-question repo
 python -m unittest discover -s eval/tests
 ```
 
+## Running it against the real retriever
+
+`run_retrieval.py` does steps 1-3 with the app's own code: it ingests the filings with
+`app.ingestion` (production chunking) into Postgres, in a separate schema (`eval_10k_v1`),
+embeds them with `app.retrieval.embed_pending_chunks`, asks every question through
+`HybridRetriever`, and writes `eval/runs/<name>.jsonl` plus a scored `<name>.report.json`.
+
+```bash
+pip install -e ".[retrieval]"          # sentence-transformers is only needed for the bge models
+docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
+export SEC_USER_AGENT="Your Name you@example.com"
+
+python eval/run_retrieval.py --fetch                         # full pipeline: bge-small + bge-reranker-base
+python eval/run_retrieval.py --filter doc                    # search only the question's filings
+python eval/run_retrieval.py --reranker none                 # hybrid without the reranker
+python eval/run_retrieval.py --mode keyword --reranker none  # full-text search only, needs no models
+python eval/run_retrieval.py --embedder hashing --reranker overlap   # offline stand-ins, plumbing only
+```
+
+`--fetch` saves the raw EDGAR HTML as `10k_v1/docs/<doc_id>.htm`, which keeps tables for the
+ingestion parser. A `.txt` from `fetch_corpus.py` also works, but tables arrive flattened.
+Re-runs reuse the ingested chunks and embeddings unless chunk settings
+(`DDC_CHUNK_MAX_WORDS`, `DDC_CHUNK_OVERLAP_WORDS`) or the embedding model change; `--reset` starts over.
+
+Besides the metrics, the report has `chunking_ceiling`: the share of evidence spans that appear in at
+least one stored chunk. A span missing there is lost to parsing or chunking, not to search.
+Runs with `--embedder hashing` or `--reranker overlap` are marked `standins` in the report and are
+not scores of the real models.
+
 Metrics: `evidence_recall@k` (share of spans covered in the top k), `full_hit@k` (all spans covered),
 `doc_hit@k` (a chunk from a correct filing in the top k) and `mrr`. A span counts as covered
 when it is a substring of a chunk after normalization, or when at least 90% of its tokens appear in
