@@ -1,3 +1,6 @@
+import pytest
+pytest.importorskip("anthropic")
+
 from types import SimpleNamespace
 
 import pytest

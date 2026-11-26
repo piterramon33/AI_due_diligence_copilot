@@ -2,8 +2,8 @@
 
 Generation only needs "give me an instance of this pydantic schema". Anything
 that implements `StructuredLLM` works, so swapping providers touches only this
-file. GUESS: Anthropic (Claude) is the default until the provider choice is
-confirmed.
+file. Gemini is the default (chosen 2026-11-26); Claude stays available.
+Pick with LLM_PROVIDER=gemini|anthropic, or construct a class directly.
 """
 
 from __future__ import annotations
@@ -16,6 +16,8 @@ from pydantic import BaseModel
 T = TypeVar("T", bound=BaseModel)
 
 DEFAULT_MODEL = "claude-opus-5-5"
+# Most capable Gemini model with a free API tier as of 2026-11-26.
+DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 
 
 class LLMRefusal(RuntimeError):
@@ -76,6 +78,76 @@ class AnthropicLLM:
         if parsed is None:
             raise LLMOutputError("no parsed output in response")
         return parsed
+
+
+class GeminiLLM:
+    """Gemini via the google-genai SDK with JSON structured output.
+
+    Needs a Gemini API key from Google AI Studio in GEMINI_API_KEY (or
+    GOOGLE_API_KEY). A consumer Gemini app subscription does not include
+    API access. On the free tier Google may use prompts to improve its
+    products, so do not send confidential documents on a free key.
+    """
+
+    _BLOCKED = {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII"}
+
+    def __init__(
+        self,
+        model: str | None = None,
+        *,
+        max_output_tokens: int = 16000,
+        client: object | None = None,
+    ) -> None:
+        self.model = model or os.environ.get("GENERATION_MODEL", DEFAULT_GEMINI_MODEL)
+        self.max_output_tokens = max_output_tokens
+        if client is None:
+            from google import genai
+
+            client = genai.Client()  # reads GEMINI_API_KEY / GOOGLE_API_KEY
+        self._client = client
+
+    def generate(self, *, system: str, prompt: str, schema: type[T]) -> T:
+        from google.genai import types
+
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type="application/json",
+                response_schema=schema,
+                max_output_tokens=self.max_output_tokens,
+            ),
+        )
+        feedback = getattr(response, "prompt_feedback", None)
+        if feedback is not None and getattr(feedback, "block_reason", None):
+            raise LLMRefusal(f"prompt blocked: {feedback.block_reason}")
+        candidates = getattr(response, "candidates", None) or []
+        reason = getattr(candidates[0], "finish_reason", None) if candidates else None
+        reason_name = getattr(reason, "name", str(reason) if reason else "")
+        if reason_name in self._BLOCKED:
+            raise LLMRefusal(f"model declined: {reason_name}")
+        if reason_name == "MAX_TOKENS":
+            raise LLMOutputError("output hit max_output_tokens before finishing")
+        parsed = getattr(response, "parsed", None)
+        if isinstance(parsed, schema):
+            return parsed
+        text = getattr(response, "text", None)
+        if not text:
+            raise LLMOutputError("no structured output in response")
+        try:
+            return schema.model_validate_json(text)
+        except ValueError as exc:
+            raise LLMOutputError(f"output did not match schema: {exc}") from exc
+
+
+def get_llm(provider: str | None = None) -> StructuredLLM:
+    provider = (provider or os.environ.get("LLM_PROVIDER", "gemini")).lower()
+    if provider == "gemini":
+        return GeminiLLM()
+    if provider == "anthropic":
+        return AnthropicLLM()
+    raise ValueError(f"unknown LLM_PROVIDER {provider!r}")
 
 
 class FakeLLM:

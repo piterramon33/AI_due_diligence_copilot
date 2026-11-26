@@ -1,14 +1,14 @@
 """Cited generation: risk assessment, growth opportunities, executive summary.
 
 Usage:
-    from app.generation import ReportGenerator, AnthropicLLM
-    gen = ReportGenerator(AnthropicLLM())
+    from app.generation import ReportGenerator, get_llm
+    gen = ReportGenerator(get_llm())  # Gemini by default
     report = gen.risk_assessment("Acme Corp", retrieved_chunks)
     print(report.to_markdown())
 """
 
 from .generator import ReportGenerator
-from .llm import AnthropicLLM, FakeLLM, LLMOutputError, LLMRefusal, StructuredLLM
+from .llm import AnthropicLLM, FakeLLM, GeminiLLM, get_llm, LLMOutputError, LLMRefusal, StructuredLLM
 from .types import (
     ChunkLike,
     Citation,
@@ -24,7 +24,7 @@ from .validation import check_claim, check_claims
 
 __all__ = [
     "AnthropicLLM", "ChunkLike", "Citation", "Claim", "DraftClaim", "DraftReport",
-    "FakeLLM", "LLMOutputError", "LLMRefusal", "RejectedClaim", "Report",
+    "FakeLLM", "GeminiLLM", "get_llm", "LLMOutputError", "LLMRefusal", "RejectedClaim", "Report",
     "ReportGenerator", "ReportKind", "SimpleChunk", "StructuredLLM",
     "check_claim", "check_claims",
 ]

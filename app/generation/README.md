@@ -7,9 +7,9 @@ Claims that fail the source check are dropped from the report and kept in
 `report.rejected` with the reasons.
 
 ```python
-from app.generation import AnthropicLLM, ReportGenerator
+from app.generation import ReportGenerator, get_llm
 
-gen = ReportGenerator(AnthropicLLM())          # reads ANTHROPIC_API_KEY
+gen = ReportGenerator(get_llm())               # Gemini, reads GEMINI_API_KEY
 report = gen.risk_assessment("Acme Corp", chunks)  # chunks from retrieval
 print(report.to_markdown())
 ```
@@ -26,9 +26,12 @@ Failed claims get one repair pass (`max_repairs=1`), then are dropped.
 
 ## Guesses to confirm
 
-- **Provider:** Claude (`claude-opus-5-5`, override with `GENERATION_MODEL`)
-  behind the `StructuredLLM` interface in `llm.py`. Another provider is one
-  new class there.
+- **Provider:** Gemini `gemini-3.8-flash`, the strongest model on the free API
+  tier (override with `GENERATION_MODEL`). Get a key at Google AI Studio and set
+  `GEMINI_API_KEY`; a Gemini app subscription doesn't include API access.
+  Free-tier prompts may be used by Google to improve its products, so use a
+  paid key for confidential deal documents. `LLM_PROVIDER=anthropic` switches
+  to Claude (`pip install .[anthropic]`).
 - **Number check is strict:** `$3.2 billion` fails if the source says
   `3,200 million`. Safer for diligence; loosen if it drops too much.
 - **Rating scale:** one low/medium/high field, meaning severity for risks,
