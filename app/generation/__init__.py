@@ -9,7 +9,7 @@ Usage:
 
 from .demo import DemoLLM
 from .generator import ReportGenerator
-from .llm import AnthropicLLM, FakeLLM, GeminiLLM, get_llm, LLMOutputError, LLMRefusal, StructuredLLM
+from .llm import AnthropicLLM, FakeLLM, GeminiLLM, OllamaLLM, get_llm, LLMOutputError, LLMRefusal, StructuredLLM
 from .types import (
     ChunkLike,
     Citation,
@@ -25,7 +25,7 @@ from .validation import check_claim, check_claims
 
 __all__ = [
     "AnthropicLLM", "DemoLLM", "ChunkLike", "Citation", "Claim", "DraftClaim", "DraftReport",
-    "FakeLLM", "GeminiLLM", "get_llm", "LLMOutputError", "LLMRefusal", "RejectedClaim", "Report",
+    "FakeLLM", "GeminiLLM", "OllamaLLM", "get_llm", "LLMOutputError", "LLMRefusal", "RejectedClaim", "Report",
     "ReportGenerator", "ReportKind", "SimpleChunk", "StructuredLLM",
     "check_claim", "check_claims",
 ]

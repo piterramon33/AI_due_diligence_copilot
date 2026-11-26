@@ -117,3 +117,59 @@ def test_missing_key_gives_clear_error(client, monkeypatch):
 def test_index_page_served(client):
     r = client.get("/")
     assert r.status_code == 200 and "Diligence Copilot" in r.text
+
+
+def test_default_needs_no_api_key(client, monkeypatch):
+    import app.api.copilot as copilot
+    from app.generation import OllamaLLM
+
+    for var in ("LLM_PROVIDER", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(copilot, "_llm", None)
+    monkeypatch.setattr(copilot, "_auto_provider", None)
+    monkeypatch.setattr(OllamaLLM, "available", staticmethod(lambda *a, **k: False))
+    _upload(client)
+    status = client.get("/api/status").json()
+    assert status["llm_provider"] == "demo" and status["llm_ready"]
+    r = client.post("/api/ask", json={"question": "Who is the largest customer?"})
+    assert r.status_code == 200 and r.json()["answer"]["claims"]
+
+
+def test_ollama_llm_structured_output():
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from app.generation import DraftReport, OllamaLLM
+
+    seen = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"models": []}')
+
+        def do_POST(self):
+            seen["body"] = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            out = {"claims": [], "insufficient_evidence": True}
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(json.dumps({"message": {"content": json.dumps(out)}}).encode())
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        assert OllamaLLM.available(url)
+        llm = OllamaLLM("test-model", base_url=url)
+        result = llm.generate(system="sys", prompt="hi", schema=DraftReport)
+        assert result.insufficient_evidence is True
+        assert seen["body"]["model"] == "test-model"
+        assert seen["body"]["format"]["properties"]["claims"]
+    finally:
+        server.shutdown()
+    assert not OllamaLLM.available("http://127.0.0.1:9")

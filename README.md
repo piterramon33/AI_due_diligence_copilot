@@ -107,15 +107,23 @@ A single page at `http://localhost:8000/` to upload filings, ask questions and g
 Every claim shows numbered citations (document · page · section); click one to read the cited passage.
 Claims the citation checker dropped are listed under each result.
 
+No API key or paid service is needed.
+
 ```bash
 pip install -e ".[dev]"
-echo 'GEMINI_API_KEY=your-key-from-aistudio.google.com' > .env   # read at startup, never committed
 uvicorn app.main:app --reload
 # open http://localhost:8000
 ```
 
-No key yet? `LLM_PROVIDER=demo uvicorn app.main:app` runs an offline stand-in that only quotes sentences
-from the retrieved passages, so you can try upload, search and citations end to end.
+The header shows which model answers:
+
+- **demo (offline)**, the default: no AI model. It quotes the best-matching sentence from each retrieved
+  passage, so upload, search, citations and the citation checker all work with nothing else installed.
+- **local model via [Ollama](https://ollama.com)**: picked automatically when Ollama is running. Free, and
+  documents never leave your machine. One-time setup: install Ollama, then `ollama pull qwen2.5:7b`
+  (about 4.7 GB; `OLLAMA_MODEL` picks another model).
+- Optional cloud models: a `GEMINI_API_KEY` switches to Gemini, or set `LLM_PROVIDER=anthropic`.
+  Keys can go in a `.env` file, which is read at startup and never committed.
 
 Search mode is shown in the header:
 
@@ -133,5 +141,4 @@ Search mode is shown in the header:
 | `GET` | `/api/status` | Search mode and whether the LLM key is set |
 
 Guesses to revisit: the canned search queries per report and pool size (`app/copilot/retrieve.py`), 8 passages
-per question, and up to 5 claims per answer. Free-tier Gemini keys let Google use prompts for training, so use a
-paid key for confidential documents.
+per question, up to 5 claims per answer, and `qwen2.5:7b` as the local model.

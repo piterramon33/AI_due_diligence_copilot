@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from app.copilot.demo_llm import DemoLLM
 from app.copilot.qa import Answer, answer_question
 from app.copilot.retrieve import QUESTION_K, get_retriever, pool_for_report
-from app.generation import LLMOutputError, LLMRefusal, Report, ReportGenerator, ReportKind, StructuredLLM, get_llm
+from app.generation import LLMOutputError, OllamaLLM, LLMRefusal, Report, ReportGenerator, ReportKind, StructuredLLM, get_llm
 from app.generation.types import ChunkLike, Citation
 from app.models import Chunk
 from app.storage import ChunkStore, get_store
@@ -50,16 +50,32 @@ class ReportResponse(BaseModel):
     retrieval: str
 
 
+_auto_provider: str | None = None
+
+
 def _provider() -> str:
-    return os.environ.get("LLM_PROVIDER", "gemini").lower()
+    """LLM_PROVIDER if set. Otherwise Gemini if a key is set (same rule as get_llm),
+    then a local Ollama server if one is running, else the offline demo.
+    No API key is needed by default.
+    """
+    global _auto_provider
+    explicit = os.environ.get("LLM_PROVIDER", "").lower()
+    if explicit and explicit != "auto":
+        return explicit
+    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+        return "gemini"
+    if _auto_provider is None:
+        _auto_provider = "ollama" if OllamaLLM.available() else "demo"
+        log.info("LLM provider (auto): %s", _auto_provider)
+    return _auto_provider
 
 
 def _llm_problem() -> str | None:
     provider = _provider()
     if provider == "gemini" and not (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")):
-        return "No GEMINI_API_KEY set. Add it to .env and restart, or run with LLM_PROVIDER=demo."
+        return "LLM_PROVIDER=gemini but no GEMINI_API_KEY is set."
     if provider == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
-        return "No ANTHROPIC_API_KEY set."
+        return "LLM_PROVIDER=anthropic but no ANTHROPIC_API_KEY is set."
     return None
 
 
@@ -73,7 +89,7 @@ def get_ui_llm() -> StructuredLLM:
         if problem:
             raise HTTPException(503, problem)
         try:
-            _llm = DemoLLM() if _provider() == "demo" else get_llm()
+            _llm = DemoLLM() if _provider() == "demo" else get_llm(_provider())
         except ImportError as exc:
             raise HTTPException(503, f"LLM SDK not installed: {exc}") from exc
         except ValueError as exc:
@@ -117,10 +133,15 @@ def status(store: ChunkStore = Depends(get_store)) -> dict:
     problem = _llm_problem()
     model = None
     if not problem:
-        from app.generation.llm import DEFAULT_GEMINI_MODEL, DEFAULT_MODEL
+        from app.generation.llm import DEFAULT_GEMINI_MODEL, DEFAULT_MODEL, DEFAULT_OLLAMA_MODEL
 
-        defaults = {"demo": DemoLLM.model, "gemini": DEFAULT_GEMINI_MODEL, "anthropic": DEFAULT_MODEL}
-        model = DemoLLM.model if _provider() == "demo" else os.environ.get("GENERATION_MODEL") or defaults.get(_provider())
+        p = _provider()
+        if p == "demo":
+            model = DemoLLM.model
+        elif p == "ollama":
+            model = "local: " + os.environ.get("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+        else:
+            model = os.environ.get("GENERATION_MODEL") or {"gemini": DEFAULT_GEMINI_MODEL, "anthropic": DEFAULT_MODEL}.get(p)
     return {
         "retrieval": retriever.name,
         "llm_provider": _provider(),
