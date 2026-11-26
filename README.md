@@ -100,3 +100,38 @@ tests/                            # synthetic 10-K PDF/HTML built at test time
 - A 10-K table of contents becomes a table chunk with no section.
 - Heading thresholds and chunk sizes are guesses, not yet tuned on real filings.
 - No `.docx`, `.xlsx` or `.pptx` parsers yet.
+
+## Upload-and-ask screen
+
+A single page at `http://localhost:8000/` to upload filings, ask questions and generate the three reports.
+Every claim shows numbered citations (document · page · section); click one to read the cited passage.
+Claims the citation checker dropped are listed under each result.
+
+```bash
+pip install -e ".[dev]"
+echo 'GEMINI_API_KEY=your-key-from-aistudio.google.com' > .env   # read at startup, never committed
+uvicorn app.main:app --reload
+# open http://localhost:8000
+```
+
+No key yet? `LLM_PROVIDER=demo uvicorn app.main:app` runs an offline stand-in that only quotes sentences
+from the retrieved passages, so you can try upload, search and citations end to end.
+
+Search mode is shown in the header:
+
+- **keyword (BM25)**, the default with no `DATABASE_URL`: in-memory, no extra installs, documents are lost on restart.
+- **hybrid (vector + full-text + rerank)**: set `DATABASE_URL` to Postgres with pgvector, run
+  `python -m app.storage.migrate`, and `pip install -e ".[retrieval]"`. New chunks are embedded before each search.
+  The first run downloads the bge models. If anything is missing it falls back to keyword search and logs why.
+  Force a mode with `DDC_RETRIEVAL=hybrid|keyword`; `DDC_RERANK=0` skips the cross-encoder.
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `POST` | `/api/ask` | `{question, document_ids?}` → cited answer + passages searched |
+| `POST` | `/api/reports` | `{kind: risk_assessment \| growth_opportunities \| executive_summary, document_ids?, company?}` |
+| `GET` | `/api/chunks/{chunk_id}` | One passage, for the citation viewer |
+| `GET` | `/api/status` | Search mode and whether the LLM key is set |
+
+Guesses to revisit: the canned search queries per report and pool size (`app/copilot/retrieve.py`), 8 passages
+per question, and up to 5 claims per answer. Free-tier Gemini keys let Google use prompts for training, so use a
+paid key for confidential documents.
