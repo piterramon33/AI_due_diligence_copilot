@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from pydantic import BaseModel
 
 from app.config import Settings, get_settings
+from app.demo import enforce_upload_cap, public_demo
 from app.ingestion import IngestError, ingest_bytes
 from app.models import Chunk, DocType, Document
 from app.storage import ChunkStore, get_store
@@ -36,6 +37,7 @@ async def upload_document(
     except IngestError as exc:
         raise HTTPException(422, str(exc)) from exc
     store.save(document, chunks)
+    enforce_upload_cap(store)
 
     warnings = []
     if document.metadata.get("needs_ocr"):
@@ -77,5 +79,8 @@ def get_chunks(
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_document(document_id: str, store: ChunkStore = Depends(get_store)) -> None:
+    doc = store.get_document(document_id)
+    if doc and doc.metadata.get("demo") and public_demo():
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "The sample filing can't be removed from the public demo")
     if not store.delete(document_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")

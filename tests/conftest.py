@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import io
+import os
+
+os.environ["DDC_DEMO_PRELOAD"] = "0"  # tests start from an empty store; tests/test_demo.py covers preloading
 
 import pytest
 from fastapi.testclient import TestClient
