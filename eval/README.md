@@ -1,14 +1,14 @@
-# 10-K retrieval eval set (v1)
+# 10-K retrieval eval set (v1.1)
 
 A small, hand-written evaluation set for checking whether the copilot's retriever
 (hybrid search + reranking) brings back the right passages from SEC 10-K filings.
 
 | | |
 |---|---|
-| Filings | Apple FY2026 (FYE 2026-09-26), NVIDIA FY2026 (FYE 2026-01-25), Tesla FY2025 (FYE 2025-12-31) |
-| Questions | 38 (13 Apple, 12 NVIDIA, 11 Tesla, 2 cross-company) |
-| Question types | lookup 12, table_lookup 11, risk 5, calculation 4, explanation 3, comparison 2, unanswerable 1 |
-| Status | 33 verified, 4 derived, 1 guess |
+| Filings | Apple FY2026 (FYE 2026-09-26), Microsoft FY2026 (FYE 2026-06-30), NVIDIA FY2026 (FYE 2026-01-25), Tesla FY2025 (FYE 2025-12-31) |
+| Questions | 55 (13 Apple, 13 Microsoft, 14 NVIDIA, 12 Tesla, 3 cross-company) |
+| Question types | lookup 18, table_lookup 15, risk 6, calculation 4, explanation 4, unanswerable 3, comparison 3, false_premise 2 |
+| Status | 47 verified, 5 derived, 3 guess |
 
 ## Files
 
@@ -16,6 +16,7 @@ A small, hand-written evaluation set for checking whether the copilot's retrieve
 - `10k_v1/questions.jsonl`: one question per line (schema below).
 - `fetch_corpus.py`: downloads the filings from EDGAR into `10k_v1/docs/*.txt` (gitignored) and checks every evidence span against them.
 - `score_retrieval.py`: scores a retriever's ranked results against the evidence spans.
+- `score_answers.py`: checks generated answers for the right number (unit-aware, within tolerance) and for abstaining on unanswerable questions.
 - `tests/`: schema checks and scorer tests, including a fixture cut from real EDGAR table markup.
 
 ## Question schema
@@ -43,7 +44,9 @@ A small, hand-written evaluation set for checking whether the copilot's retrieve
 
 - **verified**: every evidence span was found word for word in the filing's text from EDGAR on 2026-11-26, and the expected answer only restates those spans.
 - **derived**: the evidence spans are verified, but the answer involves a hand calculation (a share, a growth rate, or free cash flow). Check the arithmetic if a number looks off.
-- **guess**: not confirmed against the filing. Right now this is only `aapl-13`, the unanswerable Vision Pro units question. It assumes Apple doesn't disclose unit sales. A keyword search found nothing, but the filing was not read in full.
+- **guess**: not confirmed against the filing. These are the three unanswerable questions: Apple Vision Pro units (`aapl-13`), Azure revenue in dollars (`msft-07`) and Blackwell units shipped (`nvda-14`). Each assumes the figure isn't disclosed. A targeted keyword search of each filing found nothing, but no filing was read in full.
+
+Two question types test whether the system holds back. `unanswerable` questions have no evidence, and the right answer says the figure isn't disclosed. `false_premise` questions, such as how much NVIDIA invested in OpenAI, do have evidence, and the right answer corrects the premise.
 
 These fields are my own judgment on every question, so treat them as guesses: `difficulty`, `question_type`, and `section`. Section labels were placed by reading the surrounding text and are approximate. Notes on a question mark any specific doubt.
 
@@ -60,6 +63,9 @@ SEC_USER_AGENT="Your Name you@example.com" python eval/fetch_corpus.py
 # 3. Score
 python eval/score_retrieval.py results.jsonl            # summary
 python eval/score_retrieval.py results.jsonl --json     # full per-question report
+
+# 4. Score answers (add an "answer" string to each results line)
+python eval/score_answers.py results.jsonl
 
 # Tests
 python -m unittest discover -s eval/tests
@@ -105,5 +111,5 @@ that the generator abstains.
 
 - The set is small, so the numbers are noisy. Use it as a regression check and add questions over time.
 - A span split across two chunks only counts if one chunk holds 90% or more of its tokens. Table-heavy questions are the most sensitive to how documents are chunked.
-- Answer quality is not scored yet. `answer_value` and `tolerance` are there so a numeric answer check can be added.
-- Possible additions: more filings (a bank, such as JPMorgan, whose 10-K points to an annual report exhibit), more unanswerable questions, and questions that need Item 1A risk factors and the financial statements together.
+- `score_answers.py` only checks numbers and abstention. It doesn't grade the wording or check citations. An LLM judge or the generation module's citation validator could cover those.
+- Possible additions: a bank (JPMorgan's 10-K points to an annual report exhibit, so ingestion has to follow exhibits), questions that span multiple years of one company's filings, and more false-premise questions.

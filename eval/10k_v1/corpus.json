@@ -33,6 +33,17 @@
       "filed": "2026-01-29",
       "accession": "0001628280-26-003952",
       "url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828026003952/tsla-20251231.htm"
+    },
+    {
+      "doc_id": "MSFT-10K-FY2026",
+      "company": "Microsoft Corporation",
+      "ticker": "MSFT",
+      "cik": "0000789019",
+      "form": "10-K",
+      "fiscal_year_end": "2026-06-30",
+      "filed": "2026-07-29",
+      "accession": "0001193125-26-323660",
+      "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm"
     }
   ]
 }

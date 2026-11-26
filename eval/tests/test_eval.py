@@ -53,3 +53,29 @@ class TestScorer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAnswerScorer(unittest.TestCase):
+    def test_numbers_and_units(self):
+        from score_answers import number_matches
+        self.assertTrue(number_matches("Net sales were $478.8 billion.", 478834, "USD millions", 0.005))
+        self.assertTrue(number_matches("Net sales were $478,834 million.", 478834, "USD millions", 0.005))
+        self.assertTrue(number_matches("It was 478,834 (in millions).", 478834, "USD millions", 0.005))
+        self.assertFalse(number_matches("Net sales were $416.2 billion.", 478834, "USD millions", 0.005))
+        self.assertTrue(number_matches("About 53.1% of sales.", 0.531, "ratio", 0.01))
+        self.assertTrue(number_matches("Approximately 167,000 employees.", 167000, "employees", 0.0))
+
+    def test_abstention(self):
+        from score_answers import abstains
+        self.assertTrue(abstains("Apple does not disclose unit sales for Vision Pro."))
+        self.assertTrue(abstains("That figure is not separately disclosed in the 10-K."))
+        self.assertFalse(abstains("Apple sold 400,000 Vision Pro units."))
+
+    def test_score_end_to_end(self):
+        from score_answers import score
+        res = [{"id": "aapl-01", "answer": "$478.8 billion"}, {"id": "aapl-13", "answer": "Not disclosed."},
+               {"id": "aapl-12", "answer": "This is not disclosed."}]
+        rep = score(QS, res)
+        self.assertEqual(rep["numeric_accuracy"], 0.5)
+        self.assertEqual(rep["abstention_rate"], 1.0)
+        self.assertEqual(rep["false_abstention"], 0.5)
