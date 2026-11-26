@@ -77,15 +77,32 @@ details li { margin: 6px 0; }
 #drawer { position: fixed; inset: 0 0 0 auto; width: min(560px, 100%); background: var(--panel); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(0,0,0,.15); transform: translateX(100%); visibility: hidden; transition: transform .2s, visibility .2s; display: flex; flex-direction: column; z-index: 10; }
 #drawer.open { transform: none; visibility: visible; }
 #drawer .head { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; align-items: start; }
-#drawer .body { padding: 16px; overflow: auto; white-space: pre-wrap; font-size: 14px; }
+#drawer .body { padding: 16px; overflow: auto; font-size: 14px; }
+#drawer .body p { margin: 0 0 8px; white-space: pre-wrap; }
+#drawer .body p:empty { display: none; }
+.tbl { border-collapse: collapse; width: 100%; font-size: 13px; margin: 4px 0 12px; font-variant-numeric: tabular-nums; }
+.tbl th, .tbl td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: right; }
+.tbl th:first-child, .tbl td:first-child { text-align: left; }
+.tbl th { color: var(--muted); font-weight: 600; }
 #drawer .label { font-weight: 600; }
 #drawer .id { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); word-break: break-all; }
 mark { background: var(--mark); color: inherit; }
+.brand { display: flex; flex-direction: column; }
+.brand .tag { font-size: 12px; color: var(--muted); }
+.brand a { color: var(--accent); }
+.samples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.samples button { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: var(--chip); color: var(--chip-ink); border: 0; }
+.demo-note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.demo-note a { color: var(--accent); }
+.pill { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; background: var(--chip); color: var(--chip-ink); border-radius: 99px; padding: 1px 6px; margin-left: 4px; vertical-align: 1px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Diligence Copilot</h1>
+  <div class="brand">
+    <h1>Diligence Copilot</h1>
+    <span class="tag">Cited answers from filings with hybrid search · <a id="repoLink" href="https://github.com/piterramon33/AI_due_diligence_copilot" target="_blank" rel="noopener">source on GitHub</a></span>
+  </div>
   <div id="status">Checking setup…</div>
 </header>
 
@@ -107,6 +124,7 @@ mark { background: var(--mark); color: inherit; }
         <input type="text" id="company" placeholder="e.g. Apple Inc.">
         <div class="row mt"><button class="primary" type="submit" id="uploadBtn">Upload</button></div>
         <div id="uploadMsg"></div>
+        <div class="msg warn" id="publicNote" style="display:none">Public demo: uploads are visible to other visitors and cleared on restart. Don't upload anything confidential.</div>
       </form>
       <ul id="docs"></ul>
       <p class="empty" id="noDocs">No documents yet. Upload a PDF, EDGAR HTML or text file.</p>
@@ -117,7 +135,8 @@ mark { background: var(--mark); color: inherit; }
     <section class="panel">
       <h2>Ask</h2>
       <form id="ask">
-        <textarea id="question" placeholder="e.g. What share of revenue comes from the largest customer?" required></textarea>
+        <textarea id="question" placeholder="e.g. What are the main supply chain risks?" required></textarea>
+        <div class="samples" id="samples"></div>
         <div class="row mt">
           <button class="primary" type="submit" id="askBtn">Ask</button>
           <span class="empty" id="scope"></span>
@@ -166,9 +185,26 @@ async function api(path, opts = {}) {
 async function loadStatus() {
   try {
     const s = await api("/api/status");
+    if (s.public_demo) $("#publicNote").style.display = "";
+    renderSamples(docs.some((d) => d.metadata?.demo) ? s.sample_questions || [] : []);
     const llm = s.llm_ready ? `<b>${esc(s.llm_model || s.llm_provider)}</b>` : `<span style="color:var(--high)">${esc(s.llm_problem)}</span>`;
     $("#status").innerHTML = `Search: <b>${esc(s.retrieval)}</b> · Model: ${llm}`;
   } catch (e) { $("#status").textContent = "Server not reachable: " + e.message; }
+}
+
+let samplesShown = false;
+function renderSamples(qs) {
+  if (samplesShown || !qs.length) return;
+  samplesShown = true;
+  const box = $("#samples");
+  box.innerHTML = `<span class="empty" style="align-self:center">Try:</span>`;
+  for (const q of qs) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = q;
+    b.onclick = () => { $("#question").value = q; $("#ask").requestSubmit(); };
+    box.appendChild(b);
+  }
 }
 
 function citeLabel(c) {
@@ -185,8 +221,9 @@ function renderDocs() {
     const form = d.metadata?.form_type ? ` ${esc(d.metadata.form_type)}` : "";
     li.innerHTML = `
       <input type="checkbox" ${selected.has(d.document_id) ? "checked" : ""} aria-label="Use ${esc(d.filename)}">
-      <div><div class="name">${esc(d.title || d.filename)}</div>
-        <div class="meta">${esc(DOC_TYPES[d.doc_type] || d.doc_type)}${form}${d.company ? " · " + esc(d.company) : ""} · ${d.page_count} pages · ${esc(d.filename)}</div></div>
+      <div><div class="name">${esc(d.title || d.filename)}${d.metadata?.demo ? '<span class="pill">sample</span>' : ""}</div>
+        <div class="meta">${esc(DOC_TYPES[d.doc_type] || d.doc_type)}${form}${d.company ? " · " + esc(d.company) : ""} · ${d.page_count} pages · ${esc(d.filename)}</div>
+        ${d.metadata?.source_url ? `<div class="demo-note">Preloaded public filing, unchanged from <a href="${esc(d.metadata.source_url)}" target="_blank" rel="noopener">SEC EDGAR</a>.</div>` : ""}</div>
       <button class="link" title="Remove">remove</button>`;
     li.querySelector("input").onchange = (e) => { e.target.checked ? selected.add(d.document_id) : selected.delete(d.document_id); renderScope(); };
     li.querySelector("button").onclick = async () => {
@@ -308,6 +345,34 @@ document.querySelectorAll(".reports button").forEach((b) => b.onclick = async ()
   b.disabled = false;
 });
 
+// Passages store tables as Markdown; show them as real tables, with "$" and "%" cells glued to their numbers.
+function tableCells(line) {
+  const out = [];
+  let pre = "";
+  for (let c of line.trim().replace(/^\||\|$/g, "").split("|").map((x) => x.trim())) {
+    // Keep one output cell per input cell so the header stays aligned with the values.
+    if (c === "$" || c === "(") { pre += c; out.push(""); }
+    else if ((c === "%" || c === ")") && out.some(Boolean)) { let k = out.length - 1; while (!out[k]) k--; out[k] += c; out.push(""); }
+    else { out.push(c ? pre + c : ""); if (c) pre = ""; }
+  }
+  return out;
+}
+function passageHtml(text) {
+  const parts = [], lines = text.split("\n");
+  for (let i = 0; i < lines.length; ) {
+    if (!lines[i].trim().startsWith("|")) { parts.push(`<p>${esc(lines[i])}</p>`); i++; continue; }
+    const rows = [];
+    while (i < lines.length && lines[i].trim().startsWith("|")) {
+      if (!/^[\s|:-]+$/.test(lines[i])) rows.push(tableCells(lines[i]));
+      i++;
+    }
+    const width = Math.max(...rows.map((r) => r.length));
+    const keep = [...Array(width).keys()].filter((j) => rows.some((r) => r[j]));
+    parts.push(`<table class="tbl">${rows.map((r, n) => `<tr>${keep.map((j) => n === 0 ? `<th>${esc(r[j] || "")}</th>` : `<td>${esc(r[j] || "")}</td>`).join("")}</tr>`).join("")}</table>`);
+  }
+  return parts.join("");
+}
+
 async function openChunk(id, terms) {
   $("#drawer").classList.add("open");
   $("#drawer").setAttribute("aria-hidden", "false");
@@ -318,9 +383,9 @@ async function openChunk(id, terms) {
     const c = await api(`/api/chunks/${encodeURIComponent(id)}`);
     const pages = c.page_start === c.page_end ? `p. ${c.page_start}` : `pp. ${c.page_start}–${c.page_end}`;
     $("#drawerLabel").textContent = [c.metadata?.title || c.metadata?.source, pages, (c.section_path || []).join(" › ") || c.section].filter(Boolean).join(" · ");
-    let html = esc(c.text);
+    let html = passageHtml(c.text);
     const words = (terms || "").toLowerCase().match(/[a-z0-9]{4,}/g) || [];
-    for (const w of new Set(words)) html = html.replace(new RegExp(`\\b(${w})`, "gi"), "<mark>$1</mark>");
+    for (const w of new Set(words)) html = html.replace(new RegExp(`(^|>)([^<]*)`, "g"), (m, a, t) => a + t.replace(new RegExp(`\\b(${w})`, "gi"), "<mark>$1</mark>"));
     $("#drawerBody").innerHTML = html;
   } catch (err) { $("#drawerLabel").textContent = "Could not load passage: " + err.message; }
 }

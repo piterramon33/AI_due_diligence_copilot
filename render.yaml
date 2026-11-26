@@ -1,0 +1,13 @@
+# One-click deploy on Render's free plan: https://render.com/deploy?repo=https://github.com/piterramon33/AI_due_diligence_copilot
+services:
+  - type: web
+    name: diligence-copilot
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DDC_PUBLIC_DEMO
+        value: "1"
+      - key: LLM_PROVIDER
+        value: demo

@@ -1,144 +1,132 @@
 # AI Due Diligence Copilot
 
-RAG-powered platform that analyzes company filings, financial statements, investor presentations and market
-reports to speed up due diligence. Hybrid search and reranking retrieve the relevant passages, and generated
-risk assessments, growth opportunities and executive summaries cite their sources.
+**Ask questions of a 10-K and get answers where every claim cites the exact page and section it came from.**
 
-This branch holds the **backend skeleton and document ingestion**. Retrieval (`app/retrieval/`) and cited
-generation (`app/generation/`) build on the chunk model defined here.
+A retrieval-augmented generation (RAG) app for due diligence. It parses company filings, financial
+statements, investor decks and market reports, finds the relevant passages with hybrid search and reranking, and
+writes risk assessments, growth opportunities and executive summaries. A citation checker drops any claim that its
+sources don't support.
 
-## Quick start
+It runs with **no API key and no paid service**. Open it and Apple's FY2026 Form 10-K, taken unchanged from SEC
+EDGAR, is already loaded.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/piterramon33/AI_due_diligence_copilot)
+
+![Asking about Apple's net sales: the answer is a row of the income statement, cited to page 28 of the 10-K](docs/img/ask.png)
+
+| Click a citation to read the source passage | Reports built from many searches |
+| --- | --- |
+| ![Citation drawer showing the net sales table from Item 7](docs/img/citation.png) | ![Risk assessment with severity ratings and citations to Item 1A](docs/img/report.png) |
+
+## What it does
+
+- **Reads real filings.** It handles EDGAR HTML (inline XBRL removed, page numbers recovered from page breaks,
+  financial tables rebuilt), PDFs (paragraphs, ruled tables, headings, running headers removed) and text or
+  Markdown. Chunks never cross a section, and each one keeps its page range and Part › Item › heading path.
+- **Hybrid retrieval.** pgvector embeddings (`bge-small-en-v1.5`) and Postgres full-text search are fused with
+  Reciprocal Rank Fusion, then reranked with a cross-encoder (`bge-reranker-base`). With no database it falls
+  back to in-memory BM25, which is what the hosted demo uses.
+- **Cited generation.** Every claim must cite chunk IDs inline. The checker rejects claims with no citation,
+  unknown IDs, or **numbers that don't appear in the cited passage**. The model gets one repair pass, and anything
+  that still fails is shown as "dropped by the citation check".
+- **Three diligence reports** besides free-form Q&A: risk assessment (rated by severity), growth opportunities
+  and executive summary. Each one pools several targeted searches.
+- **An evaluation set** of 55 questions over four real 10-Ks (Apple, Microsoft, NVIDIA, Tesla). It includes
+  unanswerable and false-premise questions, with scorers for retrieval recall and answer accuracy (`eval/`).
+
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph Ingest
+    F[PDF / EDGAR HTML / text] --> P[Parser<br/>blocks + pages]
+    P --> S[Section tracker<br/>Part › Item › heading]
+    S --> C[Chunker<br/>tables kept whole]
+  end
+  C --> DB[(Postgres + pgvector<br/>or in-memory)]
+  Q[Question or report] --> R
+  subgraph Retrieve
+    R[Vector search<br/>bge-small] --> RRF[RRF fusion]
+    K[Full-text / BM25] --> RRF
+    RRF --> RR[Cross-encoder rerank]
+  end
+  DB --> R & K
+  RR --> G[LLM drafts claims<br/>with chunk citations]
+  G --> V{Citation check<br/>ids, coverage, numbers}
+  V -- pass --> A[Answer with<br/>page + section cites]
+  V -- fail --> X[Repair once, then drop]
+```
+
+## Choose the model, all free by default
+
+| Mode | Setup | What answers |
+| --- | --- | --- |
+| **Demo (default)** | nothing | No AI model. It quotes the best-matching source sentences and financial-table rows, so search, citations and the checker all work offline. |
+| **Local model** | [Ollama](https://ollama.com) running, plus `ollama pull qwen2.5:7b` | Picked automatically when Ollama is running. Written answers, and documents never leave your machine. |
+| Gemini / Claude (optional) | `GEMINI_API_KEY`, or `LLM_PROVIDER=anthropic` with `ANTHROPIC_API_KEY` | Cloud models, used only if you opt in. |
+
+## Run it
+
+**Docker** (same image as the hosted demo):
+
+```bash
+docker build -t diligence-copilot .
+docker run -p 7860:7860 diligence-copilot      # http://localhost:7860
+```
+
+**Python 3.11+**:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev,postgres]"
-uvicorn app.main:app --reload          # http://localhost:8000/docs
+pip install -e ".[dev]"
+uvicorn app.main:app --reload                  # http://localhost:8000, API docs at /docs
 pytest
 ```
 
-Without `DATABASE_URL` documents are kept in memory (lost on restart). For Postgres:
+**Full hybrid search** (Postgres with pgvector, local embedding and reranking models):
 
 ```bash
+pip install -e ".[retrieval]"
 export DATABASE_URL=postgresql://user:pass@localhost:5432/diligence
-python -m app.storage.migrate          # applies migrations/*.sql once each
-TEST_DATABASE_URL=$DATABASE_URL pytest # also runs the Postgres tests (they drop tables: use a scratch DB)
+python -m app.storage.migrate
+uvicorn app.main:app
 ```
 
-## API
+## Deploy a free public demo
 
-| Method | Path | What it does |
-| --- | --- | --- |
-| `POST` | `/documents` | Multipart upload: `file`, optional `doc_type`, `company`. Parses, chunks and stores. Re-uploading the same file replaces it. |
-| `GET` | `/documents` | List documents |
-| `GET` | `/documents/{id}` | One document |
-| `GET` | `/documents/{id}/chunks?page=&section=` | Chunks, optionally only those covering a page or under a heading |
-| `DELETE` | `/documents/{id}` | Remove a document and its chunks |
-| `GET` | `/health` | Liveness |
+The demo needs no database, model download or key, and the image runs in about 70 MB of RAM.
 
-`doc_type` is one of `filing`, `financial_statement`, `investor_presentation`, `market_report`, `other`.
-Files that say "FORM 10-K" (10-Q, 8-K, 20-F, S-1 ...) are tagged `filing` with `metadata.form_type`.
+- **Render:** click the button above, or create a *Blueprint* from this repo. `render.yaml` sets the free plan.
+  Free instances sleep when idle, so the first visit after a while takes about a minute to wake up.
+- **Hugging Face Spaces:** create a *Docker* Space and push this repo to it. Spaces read their settings from YAML
+  at the top of the Space's README, so add `sdk: docker` and `app_port: 7860` there.
 
-## Ingestion
+`DDC_PUBLIC_DEMO=1` (set in the Dockerfile) caps uploads at 10 MB, keeps only the 5 newest uploads, protects the
+sample filing from deletion, and warns visitors that uploads are shared. Set `DDC_DEMO_PRELOAD=0` to start empty.
 
-```
-bytes ─► parser (PDF | EDGAR HTML | text/Markdown) ─► ordered blocks (heading / text / table, each with a page)
-      ─► section tracking (Part ▸ Item ▸ heading) ─► chunker ─► Chunk[] with citation metadata
-```
-
-- **PDF** (pdfplumber): lines grouped into paragraphs, ruled tables extracted separately (and removed from the
-  prose), headings from `PART`/`ITEM` patterns or larger fonts, running headers/footers and page numbers dropped.
-  Scanned PDFs are flagged `needs_ocr`.
-- **EDGAR HTML**: page numbers recovered from CSS page breaks, hidden inline-XBRL dropped, `$`/`%` cells merged
-  into their numbers, colspans expanded so financial tables line up.
-- **Text / Markdown**: `#` headings and SEC items as sections, form feeds as page breaks.
-
-Every chunk carries what a citation needs:
-
-```python
-Chunk(
-    chunk_id="doc_ab12cd34ef567890:c0007",   # "<document_id>:c<index>", document_id = "doc_" + sha256[:16]
-    document_id="doc_ab12cd34ef567890",
-    chunk_index=7,
-    text="...",                              # tables are Markdown
-    kind="text" | "table",
-    page_start=12, page_end=13,              # 1-based, exact
-    section="Item 1A. Risk Factors",
-    section_path=["Part I", "Item 1A. Risk Factors"],
-    metadata={"source": "acme-10k.pdf", "title": "...", "doc_type": "filing", "company": "Acme", "form_type": "10-K"},
-)
-chunk.citation()  # "acme-10k.pdf, p. 12-13, Item 1A. Risk Factors"
-```
-
-Chunks never cross a section; prose packs whole paragraphs up to `DDC_CHUNK_MAX_WORDS` (350) with
-`DDC_CHUNK_OVERLAP_WORDS` (50) overlap; each table is its own chunk, split by rows with the header repeated.
-
-## Generation
-
-`app/generation` turns retrieved chunks into a risk assessment, growth
-opportunities and an executive summary. Every claim cites chunk IDs inline,
-and claims without valid sources are dropped. It runs with **no API key**: the
-default `demo` provider quotes the most relevant source sentences. Set
-`GEMINI_API_KEY` (or `LLM_PROVIDER`) to get written analysis from a real model.
-See `app/generation/README.md`.
-
-## Layout
+## Project layout
 
 ```
 app/
-  main.py, config.py, models.py   # FastAPI app, settings, shared Document/Chunk models
-  api/documents.py                # upload and read endpoints
-  ingestion/                      # parsers/, sections.py, chunker.py, pipeline.py
-  storage/                        # ChunkStore protocol, in-memory and Postgres stores, migrate runner
-migrations/001_documents_chunks.sql
-tests/                            # synthetic 10-K PDF/HTML built at test time
+  ingestion/    parsers (PDF, EDGAR HTML, text), section tracking, chunker
+  storage/      in-memory and Postgres stores, SQL migrations runner
+  retrieval/    embeddings, pgvector + full-text search, RRF fusion, cross-encoder rerank
+  generation/   prompts, LLM providers (demo, Ollama, Gemini, Claude), citation validator, reports
+  copilot/      Q&A, report search pools, BM25 fallback, offline demo answerer
+  api/          REST endpoints;  static/index.html is the single-page UI
+  demo.py       preloads the bundled Apple 10-K (demo_data/)
+eval/           10-K question set, retrieval runner and scorers
+migrations/     001 documents/chunks, 002 hybrid search columns
 ```
 
-## Known gaps (first version)
+More detail (API reference, chunk schema, ingestion rules, known gaps) is in [docs/technical.md](docs/technical.md).
 
-- Tables without ruling lines in PDFs (common in decks and some financial statements) come out as prose.
-- No OCR for scanned PDFs yet; they are flagged, not parsed.
-- A 10-K table of contents becomes a table chunk with no section.
-- Heading thresholds and chunk sizes are guesses, not yet tuned on real filings.
-- No `.docx`, `.xlsx` or `.pptx` parsers yet.
+## Honest limits
 
-## Upload-and-ask screen
+- Demo mode quotes passages and doesn't reason. For written analysis, run a local Ollama model.
+- Retrieval sizes, chunk sizes and model choices are reasonable defaults, not yet tuned on the eval set.
+- There is no OCR for scanned PDFs, and no `.docx`, `.xlsx` or `.pptx` parsing yet.
+- This is a portfolio project, not investment advice.
 
-A single page at `http://localhost:8000/` to upload filings, ask questions and generate the three reports.
-Every claim shows numbered citations (document · page · section); click one to read the cited passage.
-Claims the citation checker dropped are listed under each result.
-
-No API key or paid service is needed.
-
-```bash
-pip install -e ".[dev]"
-uvicorn app.main:app --reload
-# open http://localhost:8000
-```
-
-The header shows which model answers:
-
-- **demo (offline)**, the default: no AI model. It quotes the best-matching sentence from each retrieved
-  passage, so upload, search, citations and the citation checker all work with nothing else installed.
-- **local model via [Ollama](https://ollama.com)**: picked automatically when Ollama is running. Free, and
-  documents never leave your machine. One-time setup: install Ollama, then `ollama pull qwen2.5:7b`
-  (about 4.7 GB; `OLLAMA_MODEL` picks another model).
-- Optional cloud models: a `GEMINI_API_KEY` switches to Gemini, or set `LLM_PROVIDER=anthropic`.
-  Keys can go in a `.env` file, which is read at startup and never committed.
-
-Search mode is shown in the header:
-
-- **keyword (BM25)**, the default with no `DATABASE_URL`: in-memory, no extra installs, documents are lost on restart.
-- **hybrid (vector + full-text + rerank)**: set `DATABASE_URL` to Postgres with pgvector, run
-  `python -m app.storage.migrate`, and `pip install -e ".[retrieval]"`. New chunks are embedded before each search.
-  The first run downloads the bge models. If anything is missing it falls back to keyword search and logs why.
-  Force a mode with `DDC_RETRIEVAL=hybrid|keyword`; `DDC_RERANK=0` skips the cross-encoder.
-
-| Method | Path | What it does |
-| --- | --- | --- |
-| `POST` | `/api/ask` | `{question, document_ids?}` → cited answer + passages searched |
-| `POST` | `/api/reports` | `{kind: risk_assessment \| growth_opportunities \| executive_summary, document_ids?, company?}` |
-| `GET` | `/api/chunks/{chunk_id}` | One passage, for the citation viewer |
-| `GET` | `/api/status` | Search mode and whether the LLM key is set |
-
-Guesses to revisit: the canned search queries per report and pool size (`app/copilot/retrieve.py`), 8 passages
-per question, up to 5 claims per answer, and `qwen2.5:7b` as the local model.
+Sample data: Apple Inc. Form 10-K for the fiscal year ended September 26, 2026, from
+[SEC EDGAR](https://www.sec.gov/Archives/edgar/data/320193/000032019326000026/aapl-20260926.htm) (public record).

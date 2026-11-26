@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.copilot.demo_llm import DemoLLM
+from app.demo import REPO_URL, SAMPLE_QUESTIONS, public_demo
 from app.copilot.qa import Answer, answer_question
 from app.copilot.retrieve import QUESTION_K, get_retriever, pool_for_report
 from app.generation import LLMOutputError, OllamaLLM, LLMRefusal, Report, ReportGenerator, ReportKind, StructuredLLM, get_llm
@@ -149,6 +150,9 @@ def status(store: ChunkStore = Depends(get_store)) -> dict:
         "llm_ready": problem is None,
         "llm_problem": problem,
         "documents": len(store.list_documents()),
+        "sample_questions": SAMPLE_QUESTIONS,
+        "repo_url": REPO_URL,
+        "public_demo": public_demo(),
     }
 
 
