@@ -31,6 +31,28 @@ class Settings(BaseModel):
         )
 
 
+def load_dotenv(path: str = ".env") -> None:
+    """Read KEY=value lines from .env into os.environ. Real env vars win.
+
+    Minimal on purpose (no quotes spanning lines, no interpolation) so the app
+    needs no extra dependency just to pick up GEMINI_API_KEY.
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except FileNotFoundError:
+        return
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.removeprefix("export ").split("=", 1)
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings.from_env()

@@ -100,3 +100,45 @@ tests/                            # synthetic 10-K PDF/HTML built at test time
 - A 10-K table of contents becomes a table chunk with no section.
 - Heading thresholds and chunk sizes are guesses, not yet tuned on real filings.
 - No `.docx`, `.xlsx` or `.pptx` parsers yet.
+
+## Upload-and-ask screen
+
+A single page at `http://localhost:8000/` to upload filings, ask questions and generate the three reports.
+Every claim shows numbered citations (document · page · section); click one to read the cited passage.
+Claims the citation checker dropped are listed under each result.
+
+No API key or paid service is needed.
+
+```bash
+pip install -e ".[dev]"
+uvicorn app.main:app --reload
+# open http://localhost:8000
+```
+
+The header shows which model answers:
+
+- **demo (offline)**, the default: no AI model. It quotes the best-matching sentence from each retrieved
+  passage, so upload, search, citations and the citation checker all work with nothing else installed.
+- **local model via [Ollama](https://ollama.com)**: picked automatically when Ollama is running. Free, and
+  documents never leave your machine. One-time setup: install Ollama, then `ollama pull qwen2.5:7b`
+  (about 4.7 GB; `OLLAMA_MODEL` picks another model).
+- Optional cloud models: a `GEMINI_API_KEY` switches to Gemini, or set `LLM_PROVIDER=anthropic`.
+  Keys can go in a `.env` file, which is read at startup and never committed.
+
+Search mode is shown in the header:
+
+- **keyword (BM25)**, the default with no `DATABASE_URL`: in-memory, no extra installs, documents are lost on restart.
+- **hybrid (vector + full-text + rerank)**: set `DATABASE_URL` to Postgres with pgvector, run
+  `python -m app.storage.migrate`, and `pip install -e ".[retrieval]"`. New chunks are embedded before each search.
+  The first run downloads the bge models. If anything is missing it falls back to keyword search and logs why.
+  Force a mode with `DDC_RETRIEVAL=hybrid|keyword`; `DDC_RERANK=0` skips the cross-encoder.
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `POST` | `/api/ask` | `{question, document_ids?}` → cited answer + passages searched |
+| `POST` | `/api/reports` | `{kind: risk_assessment \| growth_opportunities \| executive_summary, document_ids?, company?}` |
+| `GET` | `/api/chunks/{chunk_id}` | One passage, for the citation viewer |
+| `GET` | `/api/status` | Search mode and whether the LLM key is set |
+
+Guesses to revisit: the canned search queries per report and pool size (`app/copilot/retrieve.py`), 8 passages
+per question, up to 5 claims per answer, and `qwen2.5:7b` as the local model.

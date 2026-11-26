@@ -4,7 +4,7 @@ Generation only needs "give me an instance of this pydantic schema". Anything
 that implements `StructuredLLM` works, so swapping providers touches only this
 file. With no API key the keyless demo provider (demo.py) runs, so the
 project works out of the box. Gemini and Claude are optional. Pick with
-LLM_PROVIDER=demo|gemini|anthropic, or construct a class directly.
+LLM_PROVIDER=demo|gemini|anthropic|ollama, or construct a class directly.
 """
 
 from __future__ import annotations
@@ -142,6 +142,66 @@ class GeminiLLM:
             raise LLMOutputError(f"output did not match schema: {exc}") from exc
 
 
+# GUESS: a 7-8B model that follows JSON schemas well and runs on a laptop.
+DEFAULT_OLLAMA_MODEL = "qwen2.5:7b"
+DEFAULT_OLLAMA_URL = "http://localhost:11434"
+
+
+class OllamaLLM:
+    """A local model through Ollama (https://ollama.com). Free, no API key, nothing leaves the machine.
+
+    Uses Ollama's structured outputs: the pydantic JSON schema goes in `format`.
+    Set OLLAMA_MODEL / OLLAMA_URL to change the model or server.
+    """
+
+    def __init__(self, model: str | None = None, *, base_url: str | None = None, timeout: float = 300) -> None:
+        self.model = model or os.environ.get("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+        self.base_url = (base_url or os.environ.get("OLLAMA_URL", DEFAULT_OLLAMA_URL)).rstrip("/")
+        self.timeout = timeout
+
+    @staticmethod
+    def available(base_url: str | None = None, timeout: float = 0.5) -> bool:
+        import urllib.request
+
+        url = (base_url or os.environ.get("OLLAMA_URL", DEFAULT_OLLAMA_URL)).rstrip("/") + "/api/tags"
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as r:
+                return r.status == 200
+        except OSError:
+            return False
+
+    def generate(self, *, system: str, prompt: str, schema: type[T]) -> T:
+        import json
+        import urllib.error
+        import urllib.request
+
+        body = json.dumps({
+            "model": self.model,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            "format": schema.model_json_schema(),
+            "stream": False,
+            "options": {"temperature": 0},
+        }).encode()
+        req = urllib.request.Request(
+            self.base_url + "/api/chat", data=body, headers={"Content-Type": "application/json"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                data = json.loads(r.read())
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode(errors="replace")[:300]
+            if exc.code == 404:
+                raise LLMOutputError(f"model {self.model!r} not found; run: ollama pull {self.model}") from exc
+            raise LLMOutputError(f"Ollama error {exc.code}: {detail}") from exc
+        text = (data.get("message") or {}).get("content") or ""
+        if not text:
+            raise LLMOutputError("no output from Ollama")
+        try:
+            return schema.model_validate_json(text)
+        except ValueError as exc:
+            raise LLMOutputError(f"output did not match schema: {exc}") from exc
+
+
 def get_llm(provider: str | None = None) -> StructuredLLM:
     """Pick a provider. Unset means Gemini if a Gemini key is set, else demo."""
     provider = (provider or os.environ.get("LLM_PROVIDER") or "").lower()
@@ -156,6 +216,8 @@ def get_llm(provider: str | None = None) -> StructuredLLM:
         return GeminiLLM()
     if provider == "anthropic":
         return AnthropicLLM()
+    if provider == "ollama":
+        return OllamaLLM()
     raise ValueError(f"unknown LLM_PROVIDER {provider!r}")
 
 
