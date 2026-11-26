@@ -1,0 +1,49 @@
+{
+  "version": "10k_v1",
+  "documents": [
+    {
+      "doc_id": "AAPL-10K-FY2026",
+      "company": "Apple Inc.",
+      "ticker": "AAPL",
+      "cik": "0000320193",
+      "form": "10-K",
+      "fiscal_year_end": "2026-09-26",
+      "filed": "2026-11-03",
+      "accession": "0000320193-26-000026",
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000026/aapl-20260926.htm"
+    },
+    {
+      "doc_id": "NVDA-10K-FY2026",
+      "company": "NVIDIA Corporation",
+      "ticker": "NVDA",
+      "cik": "0001045810",
+      "form": "10-K",
+      "fiscal_year_end": "2026-01-25",
+      "filed": "2026-02-25",
+      "accession": "0001045810-26-000021",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm"
+    },
+    {
+      "doc_id": "TSLA-10K-FY2025",
+      "company": "Tesla, Inc.",
+      "ticker": "TSLA",
+      "cik": "0001318605",
+      "form": "10-K",
+      "fiscal_year_end": "2025-12-31",
+      "filed": "2026-01-29",
+      "accession": "0001628280-26-003952",
+      "url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828026003952/tsla-20251231.htm"
+    },
+    {
+      "doc_id": "MSFT-10K-FY2026",
+      "company": "Microsoft Corporation",
+      "ticker": "MSFT",
+      "cik": "0000789019",
+      "form": "10-K",
+      "fiscal_year_end": "2026-06-30",
+      "filed": "2026-07-29",
+      "accession": "0001193125-26-323660",
+      "url": "https://www.sec.gov/Archives/edgar/data/789019/000119312526323660/msft-20260630.htm"
+    }
+  ]
+}
