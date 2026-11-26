@@ -57,9 +57,8 @@ def test_runner_end_to_end(tmp_path):
         assert report["overall"]["doc_hit@10"] == 1.0  # filter=doc, so every hit is a right filing
         assert report["run"]["standins"] == ["embedder", "reranker"]
         results = [json.loads(l) for l in (REPO / "eval" / "runs" / f"{name}.jsonl").read_text().splitlines()]
-        assert {r["retrieved"][0]["doc_id"] for r in results if r["retrieved"]} <= {
-            "AAPL-10K-FY2026", "NVDA-10K-FY2026", "TSLA-10K-FY2025",
-        }
+        corpus = json.loads((REPO / "eval" / "10k_v1" / "corpus.json").read_text())["documents"]
+        assert {h["doc_id"] for r in results for h in r["retrieved"]} <= {d["doc_id"] for d in corpus}
     finally:
         for f in (REPO / "eval" / "runs").glob(f"{name}*"):
             f.unlink()
