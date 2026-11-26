@@ -9,10 +9,21 @@ Claims that fail the source check are dropped from the report and kept in
 ```python
 from app.generation import ReportGenerator, get_llm
 
-gen = ReportGenerator(get_llm())               # Gemini, reads GEMINI_API_KEY
+gen = ReportGenerator(get_llm())               # keyless demo unless a key is set
 report = gen.risk_assessment("Acme Corp", chunks)  # chunks from retrieval
 print(report.to_markdown())
 ```
+
+## Providers
+
+| `LLM_PROVIDER` | Needs | What you get |
+|---|---|---|
+| `demo` (default with no key) | nothing | Extractive: quotes the best-matching source sentences with their chunk IDs. No API, no cost, runs offline. |
+| `gemini` (default when `GEMINI_API_KEY` is set) | `pip install .[gemini]` and a Google AI Studio key | Written analysis from `gemini-3.8-flash` |
+| `anthropic` | `pip install .[anthropic]` and `ANTHROPIC_API_KEY` | Written analysis from Claude |
+
+The demo provider goes through the same citation checks as the real models,
+so the whole pipeline can be shown without any account or key.
 
 ## What gets rejected
 
@@ -26,12 +37,12 @@ Failed claims get one repair pass (`max_repairs=1`), then are dropped.
 
 ## Guesses to confirm
 
-- **Provider:** Gemini `gemini-3.8-flash`, the strongest model on the free API
-  tier (override with `GENERATION_MODEL`). Get a key at Google AI Studio and set
-  `GEMINI_API_KEY`; a Gemini app subscription doesn't include API access.
-  Free-tier prompts may be used by Google to improve its products, so use a
-  paid key for confidential deal documents. `LLM_PROVIDER=anthropic` switches
-  to Claude (`pip install .[anthropic]`).
+- **Gemini model:** `gemini-3.8-flash`, the strongest model on the free API
+  tier (override with `GENERATION_MODEL`). A Gemini app subscription doesn't
+  include API access. Free-tier prompts may be used by Google to improve its
+  products, so use a paid key for confidential deal documents.
+- **Demo keyword lists** in `demo.py` decide which sentences count as risks,
+  growth or overview. They are hand-written and English-only.
 - **Number check is strict:** `$3.2 billion` fails if the source says
   `3,200 million`. Safer for diligence; loosen if it drops too much.
 - **Rating scale:** one low/medium/high field, meaning severity for risks,

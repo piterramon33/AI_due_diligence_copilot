@@ -44,3 +44,17 @@ def test_demo_with_no_matches_is_insufficient():
     chunks = [SimpleChunk("doc_2222222222222222:c0001", "The weather was pleasant on Tuesday afternoon.", {})]
     report = ReportGenerator(DemoLLM()).risk_assessment("Acme", chunks)
     assert report.insufficient_evidence and report.claims == []
+
+
+def test_works_with_retrieval_output():
+    from app.retrieval.models import RetrievedChunk
+
+    rc = RetrievedChunk(
+        chunk_id=R, document_id="doc_1111111111111111", text=CHUNKS[0].text,
+        metadata={"title": "Acme 10-K", "doc_type": "filing", "page_start": 12,
+                  "page_end": 12, "section": "Item 1A. Risk Factors"},
+        rrf_score=0.03, rerank_score=4.2,
+    )
+    report = ReportGenerator(DemoLLM()).risk_assessment("Acme", [rc])
+    cite = report.claims[0].citations[0]
+    assert (cite.chunk_id, cite.page_start, cite.section) == (R, 12, "Item 1A. Risk Factors")
