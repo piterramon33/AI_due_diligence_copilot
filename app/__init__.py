@@ -1,0 +1,1 @@
+"""Diligence Copilot backend."""
