@@ -14,6 +14,7 @@ dependencies = [
     "pydantic>=2.6",
     "pdfplumber>=0.11",
     "beautifulsoup4>=4.12",
+    "anthropic>=2.14",
 ]
 
 [project.optional-dependencies]
