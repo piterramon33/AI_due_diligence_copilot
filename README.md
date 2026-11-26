@@ -72,6 +72,15 @@ chunk.citation()  # "acme-10k.pdf, p. 12-13, Item 1A. Risk Factors"
 Chunks never cross a section; prose packs whole paragraphs up to `DDC_CHUNK_MAX_WORDS` (350) with
 `DDC_CHUNK_OVERLAP_WORDS` (50) overlap; each table is its own chunk, split by rows with the header repeated.
 
+## Generation
+
+`app/generation` turns retrieved chunks into a risk assessment, growth
+opportunities and an executive summary. Every claim cites chunk IDs inline,
+and claims without valid sources are dropped. It runs with **no API key**: the
+default `demo` provider quotes the most relevant source sentences. Set
+`GEMINI_API_KEY` (or `LLM_PROVIDER`) to get written analysis from a real model.
+See `app/generation/README.md`.
+
 ## Layout
 
 ```
